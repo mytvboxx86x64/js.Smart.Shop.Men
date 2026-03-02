@@ -1,0 +1,2197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPS Shopping Mapper Pro</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body {
+            overscroll-behavior: none;
+        }
+        
+        .canvas-container {
+            border: 2px solid #dee2e6;
+            border-radius: 0.5rem;
+            background: #f8f9fa;
+            position: relative;
+            touch-action: none;
+        }
+        
+        canvas {
+            display: block;
+            border-radius: 0.5rem;
+            max-width: 100%;
+            height: auto;
+        }
+        
+        .recording-indicator {
+            position: fixed;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.6; }
+        }
+        
+        .stats-card {
+            position: sticky;
+            top: 10px;
+        }
+        
+        .gps-status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 5px;
+        }
+        
+        .gps-status.active {
+            background-color: #198754;
+            box-shadow: 0 0 10px #198754;
+        }
+        
+        .gps-status.inactive {
+            background-color: #dc3545;
+        }
+        
+        .btn-record {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            font-size: 2rem;
+            position: relative;
+        }
+        
+        .btn-record.recording {
+            animation: recordPulse 1.5s infinite;
+        }
+        
+        @keyframes recordPulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+        
+        .control-panel {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 1000;
+            background: white;
+            border-radius: 15px;
+            padding: 15px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+        
+        .zone-item, .store-item {
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .zone-item:hover, .store-item:hover {
+            background-color: #e9ecef;
+        }
+        
+        .zone-item.selected, .store-item.selected {
+            background-color: #cfe2ff;
+            border-left: 4px solid #0d6efd;
+        }
+        
+        .shopping-list-item {
+            padding: 0.5rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .zone-group {
+            background-color: #f8f9fa;
+            border-left: 3px solid #0d6efd;
+            margin-bottom: 0.5rem;
+        }
+        
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 3px;
+            display: inline-block;
+            margin-right: 0.5rem;
+        }
+        
+        .compass-display {
+            width: 60px;
+            height: 60px;
+            border: 2px solid #0d6efd;
+            border-radius: 50%;
+            position: relative;
+            margin: 0 auto;
+        }
+        
+        .compass-needle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 2px;
+            height: 25px;
+            background: #dc3545;
+            transform-origin: bottom center;
+            margin-left: -1px;
+            margin-top: -25px;
+        }
+        
+        .beacon-item {
+            padding: 0.5rem;
+            border-bottom: 1px solid #dee2e6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .beacon-signal {
+            width: 30px;
+            height: 30px;
+        }
+        
+        .beacon-signal.strong {
+            color: #198754;
+        }
+        
+        .beacon-signal.medium {
+            color: #ffc107;
+        }
+        
+        .beacon-signal.weak {
+            color: #dc3545;
+        }
+        
+        .floor-plan-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            opacity: 0.5;
+        }
+        
+        #floorPlanImage {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark bg-primary sticky-top">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-cart-check"></i> GPS Mapper Pro
+            </span>
+            <div class="d-flex align-items-center gap-3">
+                <div class="text-white">
+                    <span class="gps-status inactive" id="gpsStatus"></span>
+                    <span id="gpsStatusText">GPS Off</span>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-light btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-gear"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end">
+                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#storeManagerModal">
+                            <i class="bi bi-building"></i> Manage Stores
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#importExportModal">
+                            <i class="bi bi-file-earmark-arrow-up"></i> Import/Export
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#floorPlanModal">
+                            <i class="bi bi-image"></i> Floor Plan
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" data-bs-toggle="modal" data-bs-target="#beaconModal">
+                            <i class="bi bi-broadcast"></i> Beacons
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div id="recordingIndicator" class="recording-indicator alert alert-danger" style="display: none;">
+        <i class="bi bi-record-circle"></i> Recording Path...
+    </div>
+
+    <div class="container-fluid mt-3">
+        <!-- Current Store Badge -->
+        <div class="alert alert-info d-flex justify-content-between align-items-center">
+            <div>
+                <strong><i class="bi bi-building"></i> Current Store:</strong> 
+                <span id="currentStoreName">Untitled Store</span>
+            </div>
+            <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#storeManagerModal">
+                <i class="bi bi-arrow-left-right"></i> Switch Store
+            </button>
+        </div>
+
+        <ul class="nav nav-tabs" id="mainTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="mapper-tab" data-bs-toggle="tab" data-bs-target="#mapper" type="button">
+                    <i class="bi bi-geo-alt"></i> GPS Mapper
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="zones-tab" data-bs-toggle="tab" data-bs-target="#zones" type="button">
+                    <i class="bi bi-grid-3x3"></i> Zones
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="products-tab" data-bs-toggle="tab" data-bs-target="#products" type="button">
+                    <i class="bi bi-box-seam"></i> Products
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="shopping-tab" data-bs-toggle="tab" data-bs-target="#shopping" type="button">
+                    <i class="bi bi-list-check"></i> List
+                </button>
+            </li>
+        </ul>
+
+        <div class="tab-content" id="mainTabContent">
+            <!-- GPS Mapper Component -->
+            <div class="tab-pane fade show active" id="mapper" role="tabpanel">
+                <div class="row mt-3">
+                    <div class="col-lg-9">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Store Layout Map</h5>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-danger" id="clearMap">
+                                        <i class="bi bi-trash"></i> Clear
+                                    </button>
+                                    <button class="btn btn-outline-secondary" id="centerMap">
+                                        <i class="bi bi-crosshair"></i> Center
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="canvas-container" id="canvasContainer">
+                                    <canvas id="mapCanvas" width="800" height="600"></canvas>
+                                    <canvas id="floorPlanCanvas" width="800" height="600" style="position: absolute; top: 0; left: 0; pointer-events: none;"></canvas>
+                                </div>
+                                
+                                <!-- Mobile Control Panel -->
+                                <div class="control-panel d-lg-none">
+                                    <div class="d-flex justify-content-around align-items-center gap-3">
+                                        <button class="btn btn-outline-secondary" id="zoomOut">
+                                            <i class="bi bi-dash-lg"></i>
+                                        </button>
+                                        <button class="btn btn-danger btn-record" id="toggleRecord">
+                                            <i class="bi bi-circle-fill"></i>
+                                        </button>
+                                        <button class="btn btn-outline-secondary" id="zoomIn">
+                                            <i class="bi bi-plus-lg"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-3">
+                        <div class="card stats-card">
+                            <div class="card-header">
+                                <h6 class="mb-0">GPS Controls</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="d-grid gap-2 mb-3">
+                                    <button class="btn btn-success d-lg-block d-none" id="startMapping">
+                                        <i class="bi bi-play-circle"></i> Start Mapping
+                                    </button>
+                                    <button class="btn btn-danger d-lg-block d-none" id="stopMapping" style="display: none;">
+                                        <i class="bi bi-stop-circle"></i> Stop Mapping
+                                    </button>
+                                </div>
+                                
+                                <hr>
+                                
+                                <div class="mb-3">
+                                    <strong>Compass</strong>
+                                    <div class="compass-display mt-2">
+                                        <div class="compass-needle" id="compassNeedle"></div>
+                                    </div>
+                                    <div class="text-center mt-1 small" id="headingDisplay">0°</div>
+                                </div>
+                                
+                                <hr>
+                                
+                                <div class="small">
+                                    <strong>GPS Stats:</strong>
+                                    <div class="mt-2">
+                                        <div>Accuracy: <span id="accuracy" class="badge bg-secondary">N/A</span></div>
+                                        <div class="mt-1">Points: <span id="pointCount">0</span></div>
+                                        <div class="mt-1">Distance: <span id="distance">0</span> m</div>
+                                        <div class="mt-1">Area: <span id="area">0</span> m²</div>
+                                    </div>
+                                </div>
+                                
+                                <hr>
+                                
+                                <div class="small">
+                                    <strong>Beacons Detected:</strong>
+                                    <div id="beaconsList" class="mt-2">
+                                        <small class="text-muted">No beacons detected</small>
+                                    </div>
+                                </div>
+                                
+                                <hr>
+                                
+                                <div class="accordion accordion-flush" id="settingsAccordion">
+                                    <div class="accordion-item">
+                                        <h2 class="accordion-header">
+                                            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#settingsPanel">
+                                                <i class="bi bi-gear"></i> Settings
+                                            </button>
+                                        </h2>
+                                        <div id="settingsPanel" class="accordion-collapse collapse" data-bs-parent="#settingsAccordion">
+                                            <div class="accordion-body">
+                                                <div class="mb-2">
+                                                    <label class="form-label small">Update Interval (ms)</label>
+                                                    <input type="number" class="form-control form-control-sm" id="updateInterval" value="1000" min="100" max="5000">
+                                                </div>
+                                                <div class="mb-2">
+                                                    <label class="form-label small">Min Distance (m)</label>
+                                                    <input type="number" class="form-control form-control-sm" id="minDistance" value="0.5" min="0.1" max="5" step="0.1">
+                                                </div>
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="smoothPath" checked>
+                                                    <label class="form-check-label small" for="smoothPath">Smooth Path</label>
+                                                </div>
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="showTrail" checked>
+                                                    <label class="form-check-label small" for="showTrail">Show Trail</label>
+                                                </div>
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="useBeacons">
+                                                    <label class="form-check-label small" for="useBeacons">Use Beacons</label>
+                                                </div>
+                                                <div class="form-check form-switch">
+                                                    <input class="form-check-input" type="checkbox" id="showFloorPlan">
+                                                    <label class="form-check-label small" for="showFloorPlan">Show Floor Plan</label>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Zones -->
+            <div class="tab-pane fade" id="zones" role="tabpanel">
+                <div class="row mt-3">
+                    <div class="col-md-9">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Define Product Zones</h5>
+                                <button class="btn btn-sm btn-primary" id="addZoneBtn">
+                                    <i class="bi bi-plus-circle"></i> Add Zone
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div class="canvas-container">
+                                    <canvas id="zoneCanvas" width="800" height="600"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Zones List</h6>
+                            </div>
+                            <div class="card-body p-0">
+                                <div id="zonesList" class="list-group list-group-flush"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Products -->
+            <div class="tab-pane fade" id="products" role="tabpanel">
+                <div class="row mt-3">
+                    <div class="col-md-9">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Product Placement</h5>
+                                <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addProductModal">
+                                    <i class="bi bi-plus-circle"></i> Add Product
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div class="canvas-container">
+                                    <canvas id="productCanvas" width="800" height="600"></canvas>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h6 class="mb-0">Product List</h6>
+                            </div>
+                            <div class="card-body p-0" style="max-height: 500px; overflow-y: auto;">
+                                <div id="productsList" class="list-group list-group-flush"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Shopping List -->
+            <div class="tab-pane fade" id="shopping" role="tabpanel">
+                <div class="row mt-3">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">My Shopping List</h5>
+                            </div>
+                            <div class="card-body">
+                                <div class="input-group mb-3">
+                                    <input type="text" class="form-control" id="shoppingItemInput" placeholder="Add item...">
+                                    <button class="btn btn-primary" id="addShoppingItem">
+                                        <i class="bi bi-plus-lg"></i>
+                                    </button>
+                                </div>
+                                <div id="shoppingListItems"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">Optimized Route</h5>
+                                <button class="btn btn-sm btn-success" id="generateRoute">
+                                    <i class="bi bi-arrow-repeat"></i> Generate
+                                </button>
+                            </div>
+                            <div class="card-body">
+                                <div id="groupedList">
+                                    <p class="text-muted">Add items and generate route</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card mt-3">
+                            <div class="card-body">
+                                <canvas id="routeCanvas" width="400" height="300"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Store Manager Modal -->
+    <div class="modal fade" id="storeManagerModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Store Manager</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6>My Stores</h6>
+                        <button class="btn btn-sm btn-primary" id="createNewStore">
+                            <i class="bi bi-plus-circle"></i> New Store
+                        </button>
+                    </div>
+                    <div id="storesList" class="list-group">
+                        <!-- Stores will be listed here -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import/Export Modal -->
+    <div class="modal fade" id="importExportModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Import/Export Data</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-pills mb-3" id="importExportTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#exportTab">Export</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#importTab">Import</button>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content">
+                        <!-- Export Tab -->
+                        <div class="tab-pane fade show active" id="exportTab">
+                            <h6>Export Options</h6>
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-primary" id="exportCurrentStore">
+                                    <i class="bi bi-download"></i> Export Current Store (JSON)
+                                </button>
+                                <button class="btn btn-outline-primary" id="exportAllStores">
+                                    <i class="bi bi-download"></i> Export All Stores (JSON)
+                                </button>
+                                <button class="btn btn-outline-success" id="exportGPX">
+                                    <i class="bi bi-geo-alt"></i> Export GPS Track (GPX)
+                                </button>
+                                <button class="btn btn-outline-info" id="exportCSV">
+                                    <i class="bi bi-file-earmark-spreadsheet"></i> Export Products (CSV)
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Import Tab -->
+                        <div class="tab-pane fade" id="importTab">
+                            <h6>Import Data</h6>
+                            <div class="mb-3">
+                                <label class="form-label">Import Store/Stores (JSON)</label>
+                                <input type="file" class="form-control" id="importJSON" accept=".json">
+                                <small class="text-muted">Import previously exported store data</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Import GPS Track (GPX)</label>
+                                <input type="file" class="form-control" id="importGPX" accept=".gpx">
+                                <small class="text-muted">Import GPS tracks from other apps</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Import Products (CSV)</label>
+                                <input type="file" class="form-control" id="importCSV" accept=".csv">
+                                <small class="text-muted">Format: name,zone,x,y</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floor Plan Modal -->
+    <div class="modal fade" id="floorPlanModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Floor Plan Overlay</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Upload Floor Plan Image</label>
+                        <input type="file" class="form-control" id="floorPlanUpload" accept="image/*">
+                        <small class="text-muted">Overlay a floor plan image on your map</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Opacity</label>
+                        <input type="range" class="form-range" id="floorPlanOpacity" min="0" max="100" value="50">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Scale</label>
+                        <input type="range" class="form-range" id="floorPlanScale" min="10" max="200" value="100">
+                    </div>
+                    <div class="d-grid">
+                        <button class="btn btn-danger" id="removeFloorPlan">
+                            <i class="bi bi-trash"></i> Remove Floor Plan
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Beacon Management Modal -->
+    <div class="modal fade" id="beaconModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Bluetooth Beacon Management</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i> 
+                        <strong>Bluetooth Beacons</strong> improve indoor positioning accuracy. 
+                        Place beacons at known locations in your store and register them here.
+                    </div>
+                    
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6>Registered Beacons</h6>
+                        <button class="btn btn-sm btn-primary" id="scanBeacons">
+                            <i class="bi bi-broadcast"></i> Scan for Beacons
+                        </button>
+                    </div>
+                    
+                    <div id="registeredBeacons" class="list-group mb-3">
+                        <div class="list-group-item text-muted">
+                            <small>No beacons registered. Click "Scan for Beacons" to start.</small>
+                        </div>
+                    </div>
+                    
+                    <div class="alert alert-warning">
+                        <strong>Note:</strong> Web Bluetooth API support varies by browser. 
+                        Works best in Chrome/Edge on Android and desktop.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Other Modals -->
+    <div class="modal fade" id="addProductModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Product</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Product Name</label>
+                        <input type="text" class="form-control" id="productName">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Zone</label>
+                        <select class="form-select" id="productZone">
+                            <option value="">Select zone...</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveProduct">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="addZoneModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Zone</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Zone Name</label>
+                        <input type="text" class="form-control" id="zoneName">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Zone Color</label>
+                        <input type="color" class="form-control form-control-color" id="zoneColor" value="#0d6efd">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveZone">Save & Draw</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+</body>
+</html>
+<script>
+// ============================================================================
+// GPS Shopping Mapper Pro - Complete JavaScript Implementation
+// ============================================================================
+
+// Global Data Store
+let appData = {
+    stores: [],
+    currentStoreId: null,
+    beacons: [],
+    floorPlan: null
+};
+
+// Current Store Helper
+function getCurrentStore() {
+    if (!appData.currentStoreId) {
+        createNewStore();
+    }
+    return appData.stores.find(s => s.id === appData.currentStoreId);
+}
+
+// ============================================================================
+// STORE MANAGEMENT
+// ============================================================================
+
+class StoreManager {
+    constructor() {
+        this.loadFromLocalStorage();
+        this.setupEventListeners();
+        this.updateStoresList();
+        
+        // Create default store if none exists
+        if (appData.stores.length === 0) {
+            createNewStore();
+        } else {
+            appData.currentStoreId = appData.stores[0].id;
+        }
+        
+        this.updateCurrentStoreDisplay();
+    }
+
+    setupEventListeners() {
+        document.getElementById('createNewStore').addEventListener('click', () => {
+            const name = prompt('Enter store name:', 'New Store');
+            if (name) {
+                createNewStore(name);
+                this.updateStoresList();
+                this.updateCurrentStoreDisplay();
+            }
+        });
+    }
+
+    updateStoresList() {
+        const list = document.getElementById('storesList');
+        list.innerHTML = appData.stores.map(store => `
+            <div class="store-item list-group-item ${store.id === appData.currentStoreId ? 'selected' : ''}" data-store-id="${store.id}">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>${store.name}</strong>
+                        <br>
+                        <small class="text-muted">
+                            ${store.gpsPoints.length} GPS points | 
+                            ${store.zones.length} zones | 
+                            ${store.products.length} products
+                        </small>
+                    </div>
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-outline-primary switch-store" data-store-id="${store.id}">
+                            <i class="bi bi-check"></i> Select
+                        </button>
+                        <button class="btn btn-outline-danger delete-store" data-store-id="${store.id}">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+
+        // Add event listeners
+        list.querySelectorAll('.switch-store').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const storeId = btn.dataset.storeId;
+                this.switchStore(storeId);
+            });
+        });
+
+        list.querySelectorAll('.delete-store').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const storeId = btn.dataset.storeId;
+                this.deleteStore(storeId);
+            });
+        });
+    }
+
+    switchStore(storeId) {
+        appData.currentStoreId = storeId;
+        this.updateCurrentStoreDisplay();
+        this.updateStoresList();
+        this.saveToLocalStorage();
+        
+        // Refresh all components
+        if (window.gpsMapper) gpsMapper.draw();
+        if (window.zoneEditor) zoneEditor.draw();
+        if (window.productPlacement) productPlacement.draw();
+        
+        bootstrap.Modal.getInstance(document.getElementById('storeManagerModal'))?.hide();
+    }
+
+    deleteStore(storeId) {
+        if (appData.stores.length === 1) {
+            alert('Cannot delete the last store');
+            return;
+        }
+        
+        if (confirm('Delete this store? This cannot be undone.')) {
+            appData.stores = appData.stores.filter(s => s.id !== storeId);
+            
+            if (appData.currentStoreId === storeId) {
+                appData.currentStoreId = appData.stores[0].id;
+                this.updateCurrentStoreDisplay();
+            }
+            
+            this.updateStoresList();
+            this.saveToLocalStorage();
+        }
+    }
+
+    updateCurrentStoreDisplay() {
+        const store = getCurrentStore();
+        document.getElementById('currentStoreName').textContent = store ? store.name : 'No Store';
+    }
+
+    saveToLocalStorage() {
+        localStorage.setItem('gpsShoppingMapperData', JSON.stringify(appData));
+    }
+
+    loadFromLocalStorage() {
+        const saved = localStorage.getItem('gpsShoppingMapperData');
+        if (saved) {
+            try {
+                appData = JSON.parse(saved);
+            } catch (e) {
+                console.error('Failed to load saved data:', e);
+            }
+        }
+    }
+}
+
+function createNewStore(name = 'New Store') {
+    const store = {
+        id: 'store-' + Date.now(),
+        name: name,
+        gpsPoints: [],
+        boundary: [],
+        zones: [],
+        products: [],
+        shoppingList: [],
+        origin: null,
+        scale: 100,
+        createdAt: new Date().toISOString()
+    };
+    
+    appData.stores.push(store);
+    appData.currentStoreId = store.id;
+    
+    if (window.storeManager) {
+        storeManager.saveToLocalStorage();
+    }
+    
+    return store;
+}
+
+// ============================================================================
+// IMPORT/EXPORT FUNCTIONALITY
+// ============================================================================
+
+class ImportExport {
+    constructor() {
+        this.setupEventListeners();
+    }
+
+    setupEventListeners() {
+        // Export buttons
+        document.getElementById('exportCurrentStore').addEventListener('click', () => this.exportCurrentStore());
+        document.getElementById('exportAllStores').addEventListener('click', () => this.exportAllStores());
+        document.getElementById('exportGPX').addEventListener('click', () => this.exportGPX());
+        document.getElementById('exportCSV').addEventListener('click', () => this.exportCSV());
+
+        // Import buttons
+        document.getElementById('importJSON').addEventListener('change', (e) => this.importJSON(e));
+        document.getElementById('importGPX').addEventListener('change', (e) => this.importGPX(e));
+        document.getElementById('importCSV').addEventListener('change', (e) => this.importCSV(e));
+    }
+
+    exportCurrentStore() {
+        const store = getCurrentStore();
+        const dataStr = JSON.stringify(store, null, 2);
+        this.downloadFile(dataStr, `${store.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.json`, 'application/json');
+    }
+
+    exportAllStores() {
+        const dataStr = JSON.stringify(appData, null, 2);
+        this.downloadFile(dataStr, `all_stores_${new Date().toISOString().split('T')[0]}.json`, 'application/json');
+    }
+
+    exportGPX() {
+        const store = getCurrentStore();
+        if (store.gpsPoints.length === 0) {
+            alert('No GPS points to export');
+            return;
+        }
+
+        const gpx = `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="GPS Shopping Mapper">
+  <metadata>
+    <name>${store.name}</name>
+    <time>${new Date().toISOString()}</time>
+  </metadata>
+  <trk>
+    <name>${store.name} Layout</name>
+    <trkseg>
+${store.gpsPoints.map(p => `      <trkpt lat="${p.lat}" lon="${p.lng}">
+        <time>${new Date(p.timestamp).toISOString()}</time>
+      </trkpt>`).join('\n')}
+    </trkseg>
+  </trk>
+</gpx>`;
+
+        this.downloadFile(gpx, `${store.name.replace(/\s+/g, '_')}_track.gpx`, 'application/gpx+xml');
+    }
+
+    exportCSV() {
+        const store = getCurrentStore();
+        if (store.products.length === 0) {
+            alert('No products to export');
+            return;
+        }
+
+        const csv = 'Name,Zone,X,Y\n' + 
+            store.products.map(p => {
+                const zone = store.zones.find(z => z.id === p.zoneId);
+                return `"${p.name}","${zone?.name || ''}",${p.position?.x || ''},${p.position?.y || ''}`;
+            }).join('\n');
+
+        this.downloadFile(csv, `${store.name.replace(/\s+/g, '_')}_products.csv`, 'text/csv');
+    }
+
+    importJSON(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const data = JSON.parse(event.target.result);
+                
+                // Check if it's a single store or all stores
+                if (data.stores && Array.isArray(data.stores)) {
+                    // Import all stores
+                    if (confirm('Import all stores? This will merge with existing stores.')) {
+                        data.stores.forEach(store => {
+                            // Generate new ID to avoid conflicts
+                            store.id = 'store-' + Date.now() + Math.random();
+                            appData.stores.push(store);
+                        });
+                        
+                        storeManager.updateStoresList();
+                        storeManager.saveToLocalStorage();
+                        alert('Stores imported successfully!');
+                    }
+                } else {
+                    // Import single store
+                    if (confirm('Import this store?')) {
+                        data.id = 'store-' + Date.now();
+                        appData.stores.push(data);
+                        appData.currentStoreId = data.id;
+                        
+                        storeManager.updateStoresList();
+                        storeManager.updateCurrentStoreDisplay();
+                        storeManager.saveToLocalStorage();
+                        alert('Store imported successfully!');
+                    }
+                }
+            } catch (error) {
+                alert('Failed to import: ' + error.message);
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    }
+
+    importGPX(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const parser = new DOMParser();
+                const xmlDoc = parser.parseFromString(event.target.result, 'text/xml');
+                const trackpoints = xmlDoc.getElementsByTagName('trkpt');
+                
+                if (trackpoints.length === 0) {
+                    alert('No track points found in GPX file');
+                    return;
+                }
+
+                const store = getCurrentStore();
+                store.gpsPoints = [];
+                
+                for (let trkpt of trackpoints) {
+                    const lat = parseFloat(trkpt.getAttribute('lat'));
+                    const lng = parseFloat(trkpt.getAttribute('lon'));
+                    
+                    store.gpsPoints.push({
+                        lat: lat,
+                        lng: lng,
+                        accuracy: 10,
+                        timestamp: Date.now(),
+                        heading: 0
+                    });
+                }
+
+                if (!store.origin && store.gpsPoints.length > 0) {
+                    store.origin = {
+                        lat: store.gpsPoints[0].lat,
+                        lng: store.gpsPoints[0].lng
+                    };
+                }
+
+                storeManager.saveToLocalStorage();
+                if (window.gpsMapper) {
+                    gpsMapper.convertToCanvas();
+                    gpsMapper.draw();
+                }
+                
+                alert(`Imported ${trackpoints.length} GPS points from GPX file`);
+            } catch (error) {
+                alert('Failed to import GPX: ' + error.message);
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    }
+
+    importCSV(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const lines = event.target.result.split('\n');
+                const store = getCurrentStore();
+                let imported = 0;
+
+                // Skip header
+                for (let i = 1; i < lines.length; i++) {
+                    const line = lines[i].trim();
+                    if (!line) continue;
+
+                    // Simple CSV parsing (handles quoted fields)
+                    const matches = line.match(/(".*?"|[^,]+)(?:\s*,\s*|\s*$)/g);
+                    if (!matches || matches.length < 4) continue;
+
+                    const name = matches[0].replace(/[",]/g, '').trim();
+                    const zoneName = matches[1].replace(/[",]/g, '').trim();
+                    const x = parseFloat(matches[2].replace(/[",]/g, '').trim());
+                    const y = parseFloat(matches[3].replace(/[",]/g, '').trim());
+
+                    // Find zone by name
+                    const zone = store.zones.find(z => z.name === zoneName);
+                    
+                    if (zone && !isNaN(x) && !isNaN(y)) {
+                        store.products.push({
+                            id: 'product-' + Date.now() + i,
+                            name: name,
+                            zoneId: zone.id,
+                            position: { x, y }
+                        });
+                        imported++;
+                    }
+                }
+
+                storeManager.saveToLocalStorage();
+                if (window.productPlacement) {
+                    productPlacement.updateProductsList();
+                    productPlacement.draw();
+                }
+                
+                alert(`Imported ${imported} products from CSV file`);
+            } catch (error) {
+                alert('Failed to import CSV: ' + error.message);
+            }
+        };
+        reader.readAsText(file);
+        e.target.value = '';
+    }
+
+    downloadFile(content, filename, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+}
+
+// ============================================================================
+// FLOOR PLAN OVERLAY
+// ============================================================================
+
+class FloorPlanManager {
+    constructor() {
+        this.canvas = document.getElementById('floorPlanCanvas');
+        this.ctx = this.canvas.getContext('2d');
+        this.image = null;
+        this.setupEventListeners();
+    }
+
+    setupEventListeners() {
+        document.getElementById('floorPlanUpload').addEventListener('change', (e) => this.loadImage(e));
+        document.getElementById('floorPlanOpacity').addEventListener('input', () => this.draw());
+        document.getElementById('floorPlanScale').addEventListener('input', () => this.draw());
+        document.getElementById('removeFloorPlan').addEventListener('click', () => this.remove());
+        document.getElementById('showFloorPlan').addEventListener('change', () => this.draw());
+    }
+
+    loadImage(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            this.image = new Image();
+            this.image.onload = () => {
+                appData.floorPlan = {
+                    dataUrl: event.target.result,
+                    opacity: 50,
+                    scale: 100
+                };
+                storeManager.saveToLocalStorage();
+                this.draw();
+                alert('Floor plan loaded! Adjust opacity and scale in settings.');
+            };
+            this.image.src = event.target.result;
+        };
+        reader.readAsDataURL(file);
+    }
+
+    draw() {
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        const showFloorPlan = document.getElementById('showFloorPlan')?.checked ?? false;
+        if (!showFloorPlan || !appData.floorPlan || !this.image) return;
+
+        const opacity = document.getElementById('floorPlanOpacity')?.value || appData.floorPlan.opacity;
+        const scale = (document.getElementById('floorPlanScale')?.value || appData.floorPlan.scale) / 100;
+
+        this.ctx.globalAlpha = opacity / 100;
+        
+        const width = this.image.width * scale;
+        const height = this.image.height * scale;
+        const x = (this.canvas.width - width) / 2;
+        const y = (this.canvas.height - height) / 2;
+        
+        this.ctx.drawImage(this.image, x, y, width, height);
+        this.ctx.globalAlpha = 1;
+    }
+
+    remove() {
+        if (confirm('Remove floor plan overlay?')) {
+            this.image = null;
+            appData.floorPlan = null;
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            storeManager.saveToLocalStorage();
+        }
+    }
+}
+
+// ============================================================================
+// BLUETOOTH BEACON SUPPORT
+// ============================================================================
+
+class BeaconManager {
+    constructor() {
+        this.scanning = false;
+        this.detectedBeacons = new Map();
+        this.setupEventListeners();
+    }
+
+    setupEventListeners() {
+        document.getElementById('scanBeacons').addEventListener('click', () => this.scanForBeacons());
+    }
+
+    async scanForBeacons() {
+        if (!navigator.bluetooth) {
+            alert('Web Bluetooth is not supported on this browser/device');
+            return;
+        }
+
+        try {
+            const device = await navigator.bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: ['battery_service', 'device_information']
+            });
+
+            console.log('Found device:', device.name);
+            
+            const server = await device.gatt.connect();
+            
+            // Register beacon
+            const beacon = {
+                id: device.id,
+                name: device.name || 'Unknown Beacon',
+                rssi: -50, // Simulated
+                distance: 5, // Simulated
+                position: null
+            };
+
+            appData.beacons.push(beacon);
+            this.updateBeaconsList();
+            storeManager.saveToLocalStorage();
+            
+            alert(`Beacon "${beacon.name}" registered! Click on the map to set its position.`);
+            
+        } catch (error) {
+            console.error('Bluetooth error:', error);
+            alert('Failed to scan for beacons: ' + error.message);
+        }
+    }
+
+    updateBeaconsList() {
+        const container = document.getElementById('registeredBeacons');
+        
+        if (appData.beacons.length === 0) {
+            container.innerHTML = '<div class="list-group-item text-muted"><small>No beacons registered.</small></div>';
+            return;
+        }
+
+        container.innerHTML = appData.beacons.map(beacon => `
+            <div class="list-group-item beacon-item">
+                <div>
+                    <strong>${beacon.name}</strong>
+                    <br>
+                    <small class="text-muted">
+                        ID: ${beacon.id.substring(0, 8)}... | 
+                        Distance: ~${beacon.distance}m
+                    </small>
+                </div>
+                <button class="btn btn-sm btn-outline-danger" onclick="removeBeacon('${beacon.id}')">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </div>
+        `).join('');
+    }
+
+    updateDetectedBeacons() {
+        const container = document.getElementById('beaconsList');
+        
+        if (this.detectedBeacons.size === 0) {
+            container.innerHTML = '<small class="text-muted">No beacons detected</small>';
+            return;
+        }
+
+        container.innerHTML = Array.from(this.detectedBeacons.values()).map(beacon => `
+            <div class="beacon-item">
+                <div>
+                    <small><strong>${beacon.name}</strong></small>
+                    <br>
+                    <small class="text-muted">${beacon.distance.toFixed(1)}m</small>
+                </div>
+                <i class="bi bi-reception-${beacon.signal > -60 ? '4' : beacon.signal > -80 ? '3' : '2'} beacon-signal ${beacon.signal > -60 ? 'strong' : beacon.signal > -80 ? 'medium' : 'weak'}"></i>
+            </div>
+        `).join('');
+    }
+
+    // Calculate position using trilateration from beacons
+    calculatePositionFromBeacons() {
+        const useBeacons = document.getElementById('useBeacons')?.checked ?? false;
+        if (!useBeacons || appData.beacons.length < 3) return null;
+
+        // Simplified trilateration - in production use proper algorithm
+        const positioned = appData.beacons.filter(b => b.position);
+        if (positioned.length < 3) return null;
+
+        // Return weighted average based on signal strength
+        let totalWeight = 0;
+        let x = 0, y = 0;
+
+        positioned.forEach(beacon => {
+            const weight = 1 / (beacon.distance || 1);
+            x += beacon.position.x * weight;
+            y += beacon.position.y * weight;
+            totalWeight += weight;
+        });
+
+        return {
+            x: x / totalWeight,
+            y: y / totalWeight
+        };
+    }
+}
+
+function removeBeacon(id) {
+    if (confirm('Remove this beacon?')) {
+        appData.beacons = appData.beacons.filter(b => b.id !== id);
+        beaconManager.updateBeaconsList();
+        storeManager.saveToLocalStorage();
+    }
+}
+
+// ============================================================================
+// GPS MAPPER (Enhanced)
+// ============================================================================
+
+class GPSMapper {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.isRecording = false;
+        this.watchId = null;
+        this.lastPosition = null;
+        this.totalDistance = 0;
+        this.heading = 0;
+        
+        this.offsetX = 0;
+        this.offsetY = 0;
+        this.scale = 1;
+        this.isDragging = false;
+        this.dragStart = null;
+        
+        this.setupEventListeners();
+        this.setupCompass();
+        this.draw();
+    }
+
+    setupEventListeners() {
+        document.getElementById('startMapping')?.addEventListener('click', () => this.startRecording());
+        document.getElementById('stopMapping')?.addEventListener('click', () => this.stopRecording());
+        document.getElementById('toggleRecord')?.addEventListener('click', () => {
+            this.isRecording ? this.stopRecording() : this.startRecording();
+        });
+        
+        document.getElementById('clearMap').addEventListener('click', () => this.clear());
+        document.getElementById('centerMap').addEventListener('click', () => this.centerView());
+        document.getElementById('zoomIn')?.addEventListener('click', () => this.zoom(1.2));
+        document.getElementById('zoomOut')?.addEventListener('click', () => this.zoom(0.8));
+        
+        this.canvas.addEventListener('mousedown', (e) => this.startDrag(e));
+        this.canvas.addEventListener('mousemove', (e) => this.drag(e));
+        this.canvas.addEventListener('mouseup', () => this.endDrag());
+        this.canvas.addEventListener('mouseleave', () => this.endDrag());
+        
+        this.canvas.addEventListener('touchstart', (e) => this.startDrag(e.touches[0]));
+        this.canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            this.drag(e.touches[0]);
+        });
+        this.canvas.addEventListener('touchend', () => this.endDrag());
+    }
+
+    setupCompass() {
+        if ('DeviceOrientationEvent' in window) {
+            window.addEventListener('deviceorientation', (e) => {
+                if (e.webkitCompassHeading) {
+                    this.heading = e.webkitCompassHeading;
+                } else if (e.alpha) {
+                    this.heading = 360 - e.alpha;
+                }
+                this.updateCompass();
+            });
+        }
+    }
+
+    updateCompass() {
+        const needle = document.getElementById('compassNeedle');
+        const display = document.getElementById('headingDisplay');
+        if (needle) needle.style.transform = `rotate(${this.heading}deg)`;
+        if (display) display.textContent = Math.round(this.heading) + '°';
+    }
+
+    startRecording() {
+        if (!navigator.geolocation) {
+            alert('GPS not supported');
+            return;
+        }
+
+        this.isRecording = true;
+        this.updateUI(true);
+        
+        this.watchId = navigator.geolocation.watchPosition(
+            (position) => this.handlePosition(position),
+            (error) => this.handleError(error),
+            { enableHighAccuracy: true, maximumAge: 0, timeout: 5000 }
+        );
+    }
+
+    stopRecording() {
+        if (this.watchId) {
+            navigator.geolocation.clearWatch(this.watchId);
+            this.watchId = null;
+        }
+        this.isRecording = false;
+        this.updateUI(false);
+        this.convertToCanvas();
+        storeManager.saveToLocalStorage();
+    }
+
+    handlePosition(position) {
+        const { latitude, longitude, accuracy } = position.coords;
+        const store = getCurrentStore();
+        
+        document.getElementById('currentLat').textContent = latitude.toFixed(6);
+        document.getElementById('currentLng').textContent = longitude.toFixed(6);
+        document.getElementById('accuracy').textContent = accuracy.toFixed(1) + 'm';
+        document.getElementById('accuracy').className = 
+            accuracy < 10 ? 'badge bg-success' : 
+            accuracy < 30 ? 'badge bg-warning' : 'badge bg-danger';
+        
+        if (!store.origin) {
+            store.origin = { lat: latitude, lng: longitude };
+        }
+        
+        const minDistance = parseFloat(document.getElementById('minDistance').value);
+        
+        if (this.lastPosition) {
+            const distance = this.calculateDistance(
+                this.lastPosition.lat, this.lastPosition.lng,
+                latitude, longitude
+            );
+            
+            if (distance < minDistance) return;
+            this.totalDistance += distance;
+        }
+        
+        store.gpsPoints.push({
+            lat: latitude,
+            lng: longitude,
+            accuracy: accuracy,
+            timestamp: position.timestamp,
+            heading: this.heading
+        });
+        
+        this.lastPosition = { lat: latitude, lng: longitude };
+        this.updateStats();
+        this.draw();
+    }
+
+    handleError(error) {
+        console.error('GPS Error:', error);
+        alert('GPS Error: ' + error.message);
+        this.stopRecording();
+    }
+
+    calculateDistance(lat1, lon1, lat2, lon2) {
+        const R = 6371e3;
+        const φ1 = lat1 * Math.PI / 180;
+        const φ2 = lat2 * Math.PI / 180;
+        const Δφ = (lat2 - lat1) * Math.PI / 180;
+        const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+        const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                Math.cos(φ1) * Math.cos(φ2) *
+                Math.sin(Δλ/2) * Math.sin(Δλ/2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+        return R * c;
+    }
+
+    gpsToCanvas(lat, lng) {
+        const store = getCurrentStore();
+        if (!store.origin) return { x: 0, y: 0 };
+        
+        const x = (lng - store.origin.lng) * 111320 * Math.cos(store.origin.lat * Math.PI / 180);
+        const y = (store.origin.lat - lat) * 110540;
+        
+        return {
+            x: (x * store.scale * this.scale) + this.canvas.width / 2 + this.offsetX,
+            y: (y * store.scale * this.scale) + this.canvas.height / 2 + this.offsetY
+        };
+    }
+
+    convertToCanvas() {
+        const store = getCurrentStore();
+        if (store.gpsPoints.length === 0) return;
+        
+        store.boundary = store.gpsPoints.map(p => this.gpsToCanvas(p.lat, p.lng));
+        this.draw();
+    }
+
+    draw() {
+        const store = getCurrentStore();
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        this.drawGrid();
+        
+        if (store.gpsPoints.length > 0) {
+            const showTrail = document.getElementById('showTrail')?.checked ?? true;
+            const smooth = document.getElementById('smoothPath')?.checked ?? true;
+            
+            this.ctx.beginPath();
+            this.ctx.strokeStyle = '#0d6efd';
+            this.ctx.lineWidth = 3;
+            this.ctx.lineJoin = 'round';
+            this.ctx.lineCap = 'round';
+            
+            const points = store.gpsPoints.map(p => this.gpsToCanvas(p.lat, p.lng));
+            
+            if (points.length > 0) {
+                this.ctx.moveTo(points[0].x, points[0].y);
+                
+                if (smooth && points.length > 2) {
+                    for (let i = 1; i < points.length - 1; i++) {
+                        const xc = (points[i].x + points[i + 1].x) / 2;
+                        const yc = (points[i].y + points[i + 1].y) / 2;
+                        this.ctx.quadraticCurveTo(points[i].x, points[i].y, xc, yc);
+                    }
+                    this.ctx.lineTo(points[points.length - 1].x, points[points.length - 1].y);
+                } else {
+                    points.forEach(p => this.ctx.lineTo(p.x, p.y));
+                }
+                
+                this.ctx.stroke();
+                
+                if (showTrail) {
+                    points.forEach((p, i) => {
+                        this.ctx.beginPath();
+                        this.ctx.fillStyle = i === 0 ? '#198754' : '#0d6efd';
+                        this.ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    });
+                }
+                
+                if (this.isRecording && points.length > 0) {
+                    const last = points[points.length - 1];
+                    this.ctx.beginPath();
+                    this.ctx.fillStyle = '#dc3545';
+                    this.ctx.arc(last.x, last.y, 8, 0, Math.PI * 2);
+                    this.ctx.fill();
+                }
+            }
+        }
+        
+        // Draw floor plan
+        if (window.floorPlanManager) {
+            floorPlanManager.draw();
+        }
+    }
+
+    drawGrid() {
+        const gridSize = 50 * this.scale;
+        this.ctx.strokeStyle = '#e9ecef';
+        this.ctx.lineWidth = 1;
+        
+        for (let x = this.offsetX % gridSize; x < this.canvas.width; x += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(x, 0);
+            this.ctx.lineTo(x, this.canvas.height);
+            this.ctx.stroke();
+        }
+        
+        for (let y = this.offsetY % gridSize; y < this.canvas.height; y += gridSize) {
+            this.ctx.beginPath();
+            this.ctx.moveTo(0, y);
+            this.ctx.lineTo(this.canvas.width, y);
+            this.ctx.stroke();
+        }
+    }
+
+    startDrag(e) {
+        this.isDragging = true;
+        const rect = this.canvas.getBoundingClientRect();
+        this.dragStart = {
+            x: e.clientX - rect.left - this.offsetX,
+            y: e.clientY - rect.top - this.offsetY
+        };
+    }
+
+    drag(e) {
+        if (!this.isDragging) return;
+        
+        const rect = this.canvas.getBoundingClientRect();
+        this.offsetX = (e.clientX - rect.left) - this.dragStart.x;
+        this.offsetY = (e.clientY - rect.top) - this.dragStart.y;
+        
+        this.draw();
+    }
+
+    endDrag() {
+        this.isDragging = false;
+    }
+
+    zoom(factor) {
+        this.scale *= factor;
+        this.draw();
+    }
+
+    centerView() {
+        this.offsetX = 0;
+        this.offsetY = 0;
+        this.scale = 1;
+        this.draw();
+    }
+
+    updateUI(recording) {
+        document.getElementById('gpsStatus').className = 
+            recording ? 'gps-status active' : 'gps-status inactive';
+        document.getElementById('gpsStatusText').textContent = 
+            recording ? 'Recording' : 'GPS Off';
+        document.getElementById('recordingIndicator').style.display = 
+            recording ? 'block' : 'none';
+        
+        const startBtn = document.getElementById('startMapping');
+        const stopBtn = document.getElementById('stopMapping');
+        const recordBtn = document.getElementById('toggleRecord');
+        
+        if (startBtn && stopBtn) {
+            startBtn.style.display = recording ? 'none' : 'block';
+            stopBtn.style.display = recording ? 'block' : 'none';
+        }
+        
+        if (recordBtn) {
+            recordBtn.className = recording ? 
+                'btn btn-danger btn-record recording' : 
+                'btn btn-danger btn-record';
+            recordBtn.innerHTML = recording ? 
+                '<i class="bi bi-stop-fill"></i>' : 
+                '<i class="bi bi-circle-fill"></i>';
+        }
+    }
+
+    updateStats() {
+        const store = getCurrentStore();
+        document.getElementById('pointCount').textContent = store.gpsPoints.length;
+        document.getElementById('distance').textContent = this.totalDistance.toFixed(1);
+        
+        if (store.gpsPoints.length > 2) {
+            const area = this.calculatePolygonArea(store.gpsPoints);
+            document.getElementById('area').textContent = area.toFixed(1);
+        }
+    }
+
+    calculatePolygonArea(points) {
+        const store = getCurrentStore();
+        if (points.length < 3 || !store.origin) return 0;
+        
+        let area = 0;
+        for (let i = 0; i < points.length; i++) {
+            const j = (i + 1) % points.length;
+            const xi = (points[i].lng - store.origin.lng) * 111320 * Math.cos(store.origin.lat * Math.PI / 180);
+            const yi = (store.origin.lat - points[i].lat) * 110540;
+            const xj = (points[j].lng - store.origin.lng) * 111320 * Math.cos(store.origin.lat * Math.PI / 180);
+            const yj = (store.origin.lat - points[j].lat) * 110540;
+            
+            area += xi * yj - xj * yi;
+        }
+        
+        return Math.abs(area / 2);
+    }
+
+    clear() {
+        if (confirm('Clear all GPS data?')) {
+            const store = getCurrentStore();
+            store.gpsPoints = [];
+            store.boundary = [];
+            store.origin = null;
+            this.lastPosition = null;
+            this.totalDistance = 0;
+            this.updateStats();
+            this.draw();
+            storeManager.saveToLocalStorage();
+        }
+    }
+}
+
+// ============================================================================
+// ZONE EDITOR (Simplified - uses same logic as before)
+// ============================================================================
+
+class ZoneEditor {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.currentZone = null;
+        this.tempPoints = [];
+        
+        this.canvas.addEventListener('click', (e) => this.handleClick(e));
+        document.getElementById('addZoneBtn').addEventListener('click', () => {
+            const modal = new bootstrap.Modal(document.getElementById('addZoneModal'));
+            modal.show();
+        });
+        document.getElementById('saveZone').addEventListener('click', () => this.startZoneDrawing());
+        
+        this.draw();
+    }
+
+    startZoneDrawing() {
+        const name = document.getElementById('zoneName').value.trim();
+        const color = document.getElementById('zoneColor').value;
+        
+        if (!name) {
+            alert('Please enter a zone name');
+            return;
+        }
+        
+        this.currentZone = {
+            id: 'zone-' + Date.now(),
+            name: name,
+            color: color,
+            points: []
+        };
+        
+        this.tempPoints = [];
+        bootstrap.Modal.getInstance(document.getElementById('addZoneModal')).hide();
+        document.getElementById('zoneName').value = '';
+    }
+
+    handleClick(e) {
+        if (!this.currentZone) return;
+        
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        this.tempPoints.push({x, y});
+        this.draw();
+    }
+
+    closeCurrentZone() {
+        if (!this.currentZone || this.tempPoints.length < 3) return;
+        
+        const store = getCurrentStore();
+        this.currentZone.points = [...this.tempPoints];
+        store.zones.push(this.currentZone);
+        
+        this.currentZone = null;
+        this.tempPoints = [];
+        
+        this.updateZonesList();
+        this.draw();
+        storeManager.saveToLocalStorage();
+    }
+
+    draw() {
+        const store = getCurrentStore();
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Draw store boundary
+        if (store.boundary && store.boundary.length > 0) {
+            this.ctx.beginPath();
+            this.ctx.strokeStyle = '#adb5bd';
+            this.ctx.lineWidth = 2;
+            this.ctx.setLineDash([5, 5]);
+            this.ctx.moveTo(store.boundary[0].x, store.boundary[0].y);
+            store.boundary.forEach(p => this.ctx.lineTo(p.x, p.y));
+            this.ctx.closePath();
+            this.ctx.stroke();
+            this.ctx.setLineDash([]);
+        }
+        
+        // Draw existing zones
+        store.zones.forEach(zone => {
+            if (zone.points.length < 3) return;
+            
+            this.ctx.beginPath();
+            this.ctx.fillStyle = zone.color + '40';
+            this.ctx.strokeStyle = zone.color;
+            this.ctx.lineWidth = 2;
+            this.ctx.moveTo(zone.points[0].x, zone.points[0].y);
+            zone.points.forEach(p => this.ctx.lineTo(p.x, p.y));
+            this.ctx.closePath();
+            this.ctx.fill();
+            this.ctx.stroke();
+            
+            const centerX = zone.points.reduce((sum, p) => sum + p.x, 0) / zone.points.length;
+            const centerY = zone.points.reduce((sum, p) => sum + p.y, 0) / zone.points.length;
+            this.ctx.fillStyle = '#000';
+            this.ctx.font = 'bold 14px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(zone.name, centerX, centerY);
+        });
+        
+        // Draw current zone being drawn
+        if (this.tempPoints.length > 0) {
+            this.ctx.beginPath();
+            this.ctx.strokeStyle = this.currentZone.color;
+            this.ctx.lineWidth = 3;
+            this.ctx.moveTo(this.tempPoints[0].x, this.tempPoints[0].y);
+            this.tempPoints.forEach(p => this.ctx.lineTo(p.x, p.y));
+            this.ctx.stroke();
+            
+            this.tempPoints.forEach(p => {
+                this.ctx.beginPath();
+                this.ctx.fillStyle = this.currentZone.color;
+                this.ctx.arc(p.x, p.y, 5, 0, Math.PI * 2);
+                this.ctx.fill();
+            });
+        }
+    }
+
+    updateZonesList() {
+        const store = getCurrentStore();
+        const list = document.getElementById('zonesList');
+        list.innerHTML = store.zones.map(zone => `
+            <div class="zone-item list-group-item">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="legend-color" style="background: ${zone.color};"></span>
+                        ${zone.name}
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteZone('${zone.id}')">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+            </div>
+        `).join('');
+        
+        // Update product zone selector
+        const selector = document.getElementById('productZone');
+        selector.innerHTML = '<option value="">Select zone...</option>' +
+            store.zones.map(zone => `<option value="${zone.id}">${zone.name}</option>`).join('');
+    }
+}
+
+function deleteZone(id) {
+    if (confirm('Delete this zone?')) {
+        const store = getCurrentStore();
+        store.zones = store.zones.filter(z => z.id !== id);
+        zoneEditor.updateZonesList();
+        zoneEditor.draw();
+        storeManager.saveToLocalStorage();
+    }
+}
+
+// Add keyboard shortcuts for zone editor
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === 'Escape') {
+        if (window.zoneEditor && zoneEditor.currentZone) {
+            zoneEditor.closeCurrentZone();
+        }
+    }
+});
+
+document.getElementById('zoneCanvas')?.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    if (window.zoneEditor && zoneEditor.currentZone) {
+        zoneEditor.closeCurrentZone();
+    }
+});
+
+// ============================================================================
+// PRODUCT PLACEMENT & SHOPPING LIST (Simplified versions)
+// ============================================================================
+
+class ProductPlacement {
+    constructor(canvasId) {
+        this.canvas = document.getElementById(canvasId);
+        this.ctx = this.canvas.getContext('2d');
+        this.pendingProduct = null;
+        
+        this.canvas.addEventListener('click', (e) => this.handleClick(e));
+        document.getElementById('saveProduct').addEventListener('click', () => this.prepareProductPlacement());
+        
+        this.draw();
+    }
+
+    prepareProductPlacement() {
+        const name = document.getElementById('productName').value.trim();
+        const zoneId = document.getElementById('productZone').value;
+        
+        if (!name || !zoneId) {
+            alert('Please fill all fields');
+            return;
+        }
+        
+        this.pendingProduct = {
+            id: 'product-' + Date.now(),
+            name: name,
+            zoneId: zoneId,
+            position: null
+        };
+        
+        bootstrap.Modal.getInstance(document.getElementById('addProductModal')).hide();
+        document.getElementById('productName').value = '';
+        
+        alert('Click on the canvas to place the product');
+    }
+
+    handleClick(e) {
+        if (!this.pendingProduct) return;
+        
+        const rect = this.canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        
+        this.pendingProduct.position = {x, y};
+        const store = getCurrentStore();
+        store.products.push(this.pendingProduct);
+        this.pendingProduct = null;
+        
+        this.updateProductsList();
+        this.draw();
+        storeManager.saveToLocalStorage();
+    }
+
+    draw() {
+        const store = getCurrentStore();
+        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        
+        // Draw zones and products (simplified)
+        store.zones.forEach(zone => {
+            if (zone.points.length < 3) return;
+            
+            this.ctx.beginPath();
+            this.ctx.fillStyle = zone.color + '20';
+            this.ctx.moveTo(zone.points[0].x, zone.points[0].y);
+            zone.points.forEach(p => this.ctx.lineTo(p.x, p.y));
+            this.ctx.closePath();
+            this.ctx.fill();
+        });
+        
+        store.products.forEach(product => {
+            if (!product.position) return;
+            
+            const zone = store.zones.find(z => z.id === product.zoneId);
+            
+            this.ctx.beginPath();
+            this.ctx.fillStyle = zone ? zone.color : '#000';
+            this.ctx.arc(product.position.x, product.position.y, 8, 0, Math.PI * 2);
+            this.ctx.fill();
+            
+            this.ctx.fillStyle = '#000';
+            this.ctx.font = '12px Arial';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText(product.name, product.position.x, product.position.y - 12);
+        });
+    }
+
+    updateProductsList() {
+        const store = getCurrentStore();
+        const list = document.getElementById('productsList');
+        list.innerHTML = store.products.map(product => {
+            const zone = store.zones.find(z => z.id === product.zoneId);
+            return `
+                <div class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <strong>${product.name}</strong><br>
+                            <small>${zone?.name || 'Unknown'}</small>
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger" onclick="deleteProduct('${product.id}')">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+function deleteProduct(id) {
+    if (confirm('Delete this product?')) {
+        const store = getCurrentStore();
+        store.products = store.products.filter(p => p.id !== id);
+        productPlacement.updateProductsList();
+        productPlacement.draw();
+        storeManager.saveToLocalStorage();
+    }
+}
+
+// ============================================================================
+// SHOPPING LIST
+// ============================================================================
+
+class ShoppingList {
+    constructor() {
+        document.getElementById('addShoppingItem').addEventListener('click', () => this.addItem());
+        document.getElementById('shoppingItemInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.addItem();
+        });
+        document.getElementById('generateRoute').addEventListener('click', () => this.generateRoute());
+    }
+
+    addItem() {
+        const store = getCurrentStore();
+        const input = document.getElementById('shoppingItemInput');
+        const itemName = input.value.trim().toLowerCase();
+        
+        if (!itemName) return;
+        
+        const product = store.products.find(p => p.name.toLowerCase() === itemName);
+        
+        if (!product) {
+            if (confirm(`"${itemName}" not in database. Add anyway?`)) {
+                store.shoppingList.push({ name: itemName, found: false });
+            }
+        } else {
+            store.shoppingList.push({
+                name: product.name,
+                productId: product.id,
+                zoneId: product.zoneId,
+                found: true
+            });
+        }
+        
+        input.value = '';
+        this.updateList();
+        storeManager.saveToLocalStorage();
+    }
+
+    updateList() {
+        const store = getCurrentStore();
+        const container = document.getElementById('shoppingListItems');
+        container.innerHTML = store.shoppingList.map((item, index) => {
+            const zone = store.zones.find(z => z.id === item.zoneId);
+            return `
+                <div class="shopping-list-item d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>${item.name}</strong>
+                        ${item.found ? `<br><small>${zone?.name || 'Unknown'}</small>` : '<br><small class="text-warning">Not in database</small>'}
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="removeShoppingItem(${index})">
+                        <i class="bi bi-x"></i>
+                    </button>
+                </div>
+            `;
+        }).join('');
+    }
+
+    generateRoute() {
+        const store = getCurrentStore();
+        const items = store.shoppingList.filter(item => item.found);
+        
+        if (items.length === 0) {
+            alert('Add items that are in your database');
+            return;
+        }
+        
+        const grouped = {};
+        items.forEach(item => {
+            const zone = store.zones.find(z => z.id === item.zoneId);
+            if (!zone) return;
+            
+            if (!grouped[zone.id]) {
+                grouped[zone.id] = { zone: zone, items: [] };
+            }
+            grouped[zone.id].items.push(item);
+        });
+        
+        const ordered = Object.values(grouped).sort((a, b) => {
+            const centerA = a.zone.points.reduce((sum, p) => sum + p.x + p.y, 0);
+            const centerB = b.zone.points.reduce((sum, p) => sum + p.x + p.y, 0);
+            return centerA - centerB;
+        });
+        
+        this.displayGroupedList(ordered);
+        this.drawRoute(ordered);
+    }
+
+    displayGroupedList(grouped) {
+        const container = document.getElementById('groupedList');
+        container.innerHTML = grouped.map((group, index) => `
+            <div class="zone-group p-2 mb-2">
+                <div class="d-flex align-items-center mb-2">
+                    <span class="badge bg-primary me-2">${index + 1}</span>
+                    <strong>${group.zone.name}</strong>
+                </div>
+                <ul class="mb-0">
+                    ${group.items.map(item => `<li>${item.name}</li>`).join('')}
+                </ul>
+            </div>
+        `).join('');
+    }
+
+    drawRoute(grouped) {
+        const canvas = document.getElementById('routeCanvas');
+        const ctx = canvas.getContext('2d');
+        const store = getCurrentStore();
+        
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const scale = 0.5;
+        
+        // Draw zones and route
+        store.zones.forEach(zone => {
+            if (zone.points.length < 3) return;
+            ctx.beginPath();
+            ctx.fillStyle = zone.color + '20';
+            ctx.moveTo(zone.points[0].x * scale, zone.points[0].y * scale);
+            zone.points.forEach(p => ctx.lineTo(p.x * scale, p.y * scale));
+            ctx.closePath();
+            ctx.fill();
+        });
+        
+        grouped.forEach((group, index) => {
+            const centerX = group.zone.points.reduce((sum, p) => sum + p.x, 0) / group.zone.points.length * scale;
+            const centerY = group.zone.points.reduce((sum, p) => sum + p.y, 0) / group.zone.points.length * scale;
+            
+            ctx.beginPath();
+            ctx.fillStyle = group.zone.color;
+            ctx.arc(centerX, centerY, 15, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 14px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(index + 1, centerX, centerY);
+            
+            if (index < grouped.length - 1) {
+                const nextCenterX = grouped[index + 1].zone.points.reduce((sum, p) => sum + p.x, 0) / grouped[index + 1].zone.points.length * scale;
+                const nextCenterY = grouped[index + 1].zone.points.reduce((sum, p) => sum + p.y, 0) / grouped[index + 1].zone.points.length * scale;
+                
+                ctx.beginPath();
+                ctx.strokeStyle = '#0d6efd';
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]);
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(nextCenterX, nextCenterY);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            }
+        });
+    }
+}
+
+function removeShoppingItem(index) {
+    const store = getCurrentStore();
+    store.shoppingList.splice(index, 1);
+    shoppingList.updateList();
+    storeManager.saveToLocalStorage();
+}
+
+// ============================================================================
+// INITIALIZATION
+// ============================================================================
+
+let storeManager;
+let importExport;
+let floorPlanManager;
+let beaconManager;
+let gpsMapper;
+let zoneEditor;
+let productPlacement;
+let shoppingList;
+
+document.addEventListener('DOMContentLoaded', () => {
+    storeManager = new StoreManager();
+    importExport = new ImportExport();
+    floorPlanManager = new FloorPlanManager();
+    beaconManager = new BeaconManager();
+    gpsMapper = new GPSMapper('mapCanvas');
+    zoneEditor = new ZoneEditor('zoneCanvas');
+    productPlacement = new ProductPlacement('productCanvas');
+    shoppingList = new ShoppingList();
+    
+    // Request orientation permission on iOS
+    if (typeof DeviceOrientationEvent !== 'undefined' && 
+        typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+            .then(response => {
+                if (response === 'granted') {
+                    console.log('Compass permission granted');
+                }
+            })
+            .catch(console.error);
+    }
+    
+    // Update canvases when switching tabs
+    document.querySelectorAll('button[data-bs-toggle="tab"]').forEach(button => {
+        button.addEventListener('shown.bs.tab', function (e) {
+            if (e.target.id === 'zones-tab') {
+                zoneEditor.draw();
+            } else if (e.target.id === 'products-tab') {
+                productPlacement.draw();
+                productPlacement.updateProductsList();
+            }
+        });
+    });
+});
+</script></body></html>
